@@ -13,8 +13,11 @@ public:
     ~Impl() { EVP_cleanup(); }
 
     void EncryptFile(std::iostream &inStream, std::iostream &outStream, std::string_view password) {
-        if (!inStream || !outStream) {
-            return;
+        if (!inStream) {
+            throw std::runtime_error("EncryptFile: fail state of input stream");
+        }
+        if (!outStream) {
+            throw std::runtime_error("EncryptFile: fail state of output stream (1)");
         }
 
         auto params = CreateChiperParamsFromPassword(password);
@@ -25,32 +28,79 @@ public:
 
         if (!EVP_CipherInit_ex(ctx.get(), params.cipher, nullptr, params.key.data(), params.iv.data(),
                                params.encrypt)) {
-            throw std::runtime_error("Error on EVP_CipherInit_ex()");
+            throw std::runtime_error("EncryptFile: error on EVP_CipherInit_ex()");
         }
 
         std::vector<unsigned char> inBuf(1024);
         std::vector<unsigned char> outBuf(inBuf.size());
         int outLen;
         while (inStream && outStream) {
-            const int inLen = inStream.readsome(reinterpret_cast<char *>(inBuf.data()), inBuf.size());
+            inStream.read(reinterpret_cast<char *>(inBuf.data()), inBuf.size());
+            const int inLen = static_cast<int>(inStream.gcount());
+            if (inLen == 0) {
+                break;
+            }
 
             if (!EVP_CipherUpdate(ctx.get(), outBuf.data(), &outLen, inBuf.data(), inLen)) {
-                throw std::runtime_error("Error on EVP_CipherUpdate()");
+                throw std::runtime_error("EncryptFile: error on EVP_CipherUpdate()");
             }
 
             outStream.write(reinterpret_cast<const char *>(outBuf.data()), outLen);
         }
 
         if (!EVP_CipherFinal_ex(ctx.get(), outBuf.data(), &outLen)) {
-            throw std::runtime_error("Error on EVP_CipherFinal_ex()");
+            throw std::runtime_error("EncryptFile: error on EVP_CipherFinal_ex()");
         }
         if (!outStream) {
-            throw std::runtime_error("Fail state of output stream");
+            throw std::runtime_error("EncryptFile: fail state of output stream (2)");
         }
         outStream.write(reinterpret_cast<const char *>(outBuf.data()), outLen);
     }
 
-    void DecryptFile(std::iostream &inStream, std::iostream &outStream, std::string_view password) {}
+    void DecryptFile(std::iostream &inStream, std::iostream &outStream, std::string_view password) {
+        if (!inStream) {
+            throw std::runtime_error("DecryptFile: fail state of input stream");
+        }
+        if (!outStream) {
+            throw std::runtime_error("DecryptFile: fail state of output stream (1)");
+        }
+
+        auto params = CreateChiperParamsFromPassword(password);
+        params.encrypt = 0;
+
+        auto ctxDeleter = [](EVP_CIPHER_CTX *ptr) { EVP_CIPHER_CTX_free(ptr); };
+        std::unique_ptr<EVP_CIPHER_CTX, decltype(ctxDeleter)> ctx{EVP_CIPHER_CTX_new()};
+
+        if (!EVP_CipherInit_ex(ctx.get(), params.cipher, nullptr, params.key.data(), params.iv.data(),
+                               params.encrypt)) {
+            throw std::runtime_error("DecryptFile: error on EVP_CipherInit_ex()");
+        }
+
+        std::vector<unsigned char> inBuf(1024);
+        std::vector<unsigned char> outBuf(inBuf.size());
+        int outLen;
+        while (inStream && outStream) {
+            inStream.read(reinterpret_cast<char *>(inBuf.data()), inBuf.size());
+            const int inLen = static_cast<int>(inStream.gcount());
+            if (inLen == 0) {
+                break;
+            }
+
+            if (!EVP_CipherUpdate(ctx.get(), outBuf.data(), &outLen, inBuf.data(), inLen)) {
+                throw std::runtime_error("DecryptFile: error on EVP_CipherUpdate()");
+            }
+
+            outStream.write(reinterpret_cast<const char *>(outBuf.data()), outLen);
+        }
+
+        if (!EVP_CipherFinal_ex(ctx.get(), outBuf.data(), &outLen)) {
+            throw std::runtime_error("DecryptFile: error on EVP_CipherFinal_ex()");
+        }
+        if (!outStream) {
+            throw std::runtime_error("DecryptFile: fail state of output stream (2)");
+        }
+        outStream.write(reinterpret_cast<const char *>(outBuf.data()), outLen);
+    }
 
     std::string CalculateChecksum(std::iostream &inStream) { return {}; }
 
