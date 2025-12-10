@@ -1,6 +1,8 @@
 #include "crypto_guard_ctx.h"
 
+#include <iomanip>
 #include <openssl/evp.h>
+#include <sstream>
 #include <stdexcept>
 #include <vector>
 
@@ -102,7 +104,46 @@ public:
         outStream.write(reinterpret_cast<const char *>(outBuf.data()), outLen);
     }
 
-    std::string CalculateChecksum(std::iostream &inStream) { return {}; }
+    std::string CalculateChecksum(std::iostream &inStream) {
+        if (!inStream) {
+            throw std::runtime_error("CalculateChecksum: fail state of input stream");
+        }
+
+        auto ctxDeleter = [](EVP_MD_CTX *ptr) { EVP_MD_CTX_free(ptr); };
+        std::unique_ptr<EVP_MD_CTX, decltype(ctxDeleter)> ctx(EVP_MD_CTX_new());
+        if (!ctx) {
+            throw std::runtime_error("CalculateChecksum: message digest create failed");
+        }
+
+        if (!EVP_DigestInit_ex(ctx.get(), EVP_sha256(), NULL)) {
+            throw std::runtime_error("CalculateChecksum: error on EVP_DigestInit_ex()");
+        }
+
+        std::vector<std::byte> inBuf(1024);
+        while (inStream) {
+            inStream.read(reinterpret_cast<char *>(inBuf.data()), inBuf.size());
+            const auto inLen = static_cast<int>(inStream.gcount());
+            if (inLen == 0) {
+                break;
+            }
+
+            if (!EVP_DigestUpdate(ctx.get(), inBuf.data(), inLen)) {
+                throw std::runtime_error("CalculateChecksum: error on EVP_DigestUpdate()");
+            }
+        }
+
+        uint8_t hash[EVP_MAX_MD_SIZE];
+        unsigned int lengthOfHash = 0;
+        if (!EVP_DigestFinal_ex(ctx.get(), hash, &lengthOfHash)) {
+            throw std::runtime_error("CalculateChecksum: error on EVP_DigestFinal_ex()");
+        }
+
+        std::ostringstream out;
+        for (auto i = 0; i < lengthOfHash; ++i) {
+            out << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(hash[i]);
+        }
+        return out.str();
+    }
 
 private:
     struct AesCipherParams {

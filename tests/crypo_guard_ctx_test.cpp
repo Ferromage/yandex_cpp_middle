@@ -113,3 +113,22 @@ TEST(EncryptFileTest, TestDecryptBadStreams) {
         EXPECT_THROW(guard.DecryptFile(in, out, password), std::exception);
     }
 }
+
+TEST(EncryptFileTest, TestCalculateChecksumBadStream) {
+    CryptoGuardCtx guard;
+
+    std::stringstream in(std::ios::in | std::ios::out);
+    in.setstate(std::ios::badbit);
+    EXPECT_THROW(guard.CalculateChecksum(in), std::exception);
+}
+
+TEST(EncryptFileTest, TestCalculateChecksumSimple) {
+    CryptoGuardCtx guard;
+
+    std::stringstream in(std::ios::in | std::ios::out);
+    const std::string text = "Hello OpenSSL crypto world!\n";
+    const std::string hashRef = "703def64f94beae6152170318053adf95524d7b1936be47f7dc073123e5c8974";
+    in.write(text.data(), text.size());
+    const auto hash = guard.CalculateChecksum(in);
+    EXPECT_EQ(hash, hashRef);
+}
