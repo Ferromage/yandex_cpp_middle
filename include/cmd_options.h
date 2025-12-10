@@ -12,6 +12,7 @@ public:
     ~ProgramOptions();
 
     enum class COMMAND_TYPE {
+        UNKNOWN,
         ENCRYPT,
         DECRYPT,
         CHECKSUM,
@@ -25,7 +26,7 @@ public:
     std::string GetPassword() const { return password_; }
 
 private:
-    COMMAND_TYPE command_;
+    COMMAND_TYPE command_{COMMAND_TYPE::UNKNOWN};
     const std::unordered_map<std::string_view, COMMAND_TYPE> commandMapping_ = {
         {"encrypt", ProgramOptions::COMMAND_TYPE::ENCRYPT},
         {"decrypt", ProgramOptions::COMMAND_TYPE::DECRYPT},
