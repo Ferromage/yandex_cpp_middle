@@ -20,8 +20,8 @@ const std::vector<uint8_t> textEncryptedRef = {0xd8, 0x86, 0x7f, 0x57, 0xc5, 0x4
 TEST(CryptoGuardCtx, TestEncryptFromMain) {
     CryptoGuardCtx guard;
 
-    std::stringstream in(std::ios::in | std::ios::out | std::ios::binary);
-    std::stringstream out(std::ios::in | std::ios::out | std::ios::binary);
+    std::stringstream in(std::ios::in | std::ios::out);
+    std::stringstream out(std::ios::in | std::ios::out);
 
     in.write(textRef.data(), textRef.size());
 
@@ -37,8 +37,8 @@ TEST(CryptoGuardCtx, TestEncryptEmpty) {
     CryptoGuardCtx guard;
 
     const std::string password = "password";
-    std::stringstream in(std::ios::in | std::ios::out | std::ios::binary);
-    std::stringstream out(std::ios::in | std::ios::out | std::ios::binary);
+    std::stringstream in(std::ios::in | std::ios::out);
+    std::stringstream out(std::ios::in | std::ios::out);
 
     EXPECT_NO_THROW(guard.EncryptFile(in, out, password));
     EXPECT_EQ(out.str().size(), 16u);
@@ -49,19 +49,19 @@ TEST(EncryptFileTest, TestEncryptBadStreams) {
 
     {
         const std::string password = "password1";
-        std::stringstream in(std::ios::in | std::ios::out | std::ios::binary);
+        std::stringstream in(std::ios::in | std::ios::out);
         in.setstate(std::ios::badbit);
 
-        std::stringstream out(std::ios::in | std::ios::out | std::ios::binary);
+        std::stringstream out(std::ios::in | std::ios::out);
 
         EXPECT_THROW(guard.EncryptFile(in, out, password), std::exception);
     }
 
     {
         const std::string password = "password2";
-        std::stringstream in(std::ios::in | std::ios::out | std::ios::binary);
+        std::stringstream in(std::ios::in | std::ios::out);
 
-        std::stringstream out(std::ios::in | std::ios::out | std::ios::binary);
+        std::stringstream out(std::ios::in | std::ios::out);
         out.setstate(std::ios::badbit);
 
         EXPECT_THROW(guard.EncryptFile(in, out, password), std::exception);
@@ -71,8 +71,8 @@ TEST(EncryptFileTest, TestEncryptBadStreams) {
 TEST(CryptoGuardCtx, TestDecryptFromMain) {
     CryptoGuardCtx guard;
 
-    std::stringstream in(std::ios::in | std::ios::out | std::ios::binary);
-    std::stringstream out(std::ios::in | std::ios::out | std::ios::binary);
+    std::stringstream in(std::ios::in | std::ios::out);
+    std::stringstream out(std::ios::in | std::ios::out);
 
     in.write(reinterpret_cast<const char *>(textEncryptedRef.data()), textEncryptedRef.size());
 
@@ -84,8 +84,8 @@ TEST(CryptoGuardCtx, TestDecryptEmpty) {
     CryptoGuardCtx guard;
 
     const std::string password = "password";
-    std::stringstream in(std::ios::in | std::ios::out | std::ios::binary);
-    std::stringstream out(std::ios::in | std::ios::out | std::ios::binary);
+    std::stringstream in(std::ios::in | std::ios::out);
+    std::stringstream out(std::ios::in | std::ios::out);
 
     EXPECT_THROW(guard.DecryptFile(in, out, password), std::exception);
 }
@@ -95,19 +95,19 @@ TEST(EncryptFileTest, TestDecryptBadStreams) {
 
     {
         const std::string password = "password1";
-        std::stringstream in(std::ios::in | std::ios::out | std::ios::binary);
+        std::stringstream in(std::ios::in | std::ios::out);
         in.setstate(std::ios::badbit);
 
-        std::stringstream out(std::ios::in | std::ios::out | std::ios::binary);
+        std::stringstream out(std::ios::in | std::ios::out);
 
         EXPECT_THROW(guard.DecryptFile(in, out, password), std::exception);
     }
 
     {
         const std::string password = "password2";
-        std::stringstream in(std::ios::in | std::ios::out | std::ios::binary);
+        std::stringstream in(std::ios::in | std::ios::out);
 
-        std::stringstream out(std::ios::in | std::ios::out | std::ios::binary);
+        std::stringstream out(std::ios::in | std::ios::out);
         out.setstate(std::ios::badbit);
 
         EXPECT_THROW(guard.DecryptFile(in, out, password), std::exception);
@@ -131,4 +131,32 @@ TEST(EncryptFileTest, TestCalculateChecksumSimple) {
     in.write(text.data(), text.size());
     const auto hash = guard.CalculateChecksum(in);
     EXPECT_EQ(hash, hashRef);
+}
+
+TEST(EncryptFileTest, TestCalculateChecksumWithEncrypt) {
+    CryptoGuardCtx guard;
+
+    const std::string password = "12345";
+    std::stringstream in1(std::ios::in | std::ios::out);
+    const std::string text = "This is the test string";
+    in1.write(text.data(), text.size());
+    const auto hashBefore = guard.CalculateChecksum(in1);
+
+    std::stringstream in2(std::ios::in | std::ios::out);
+    std::stringstream out2(std::ios::in | std::ios::out);
+    in2.write(text.data(), text.size());
+    guard.EncryptFile(in2, out2, password);
+    const auto encryptedStr = out2.str();
+
+    std::stringstream in3(std::ios::in | std::ios::out);
+    std::stringstream out3(std::ios::in | std::ios::out);
+    in3.write(encryptedStr.data(), encryptedStr.size());
+    guard.DecryptFile(in3, out3, password);
+    const auto decryptedStr = out3.str();
+
+    std::stringstream in4(std::ios::in | std::ios::out);
+    in4.write(decryptedStr.data(), decryptedStr.size());
+    const auto hashAfter = guard.CalculateChecksum(in4);
+
+    EXPECT_EQ(hashBefore, hashAfter);
 }

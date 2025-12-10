@@ -1,6 +1,7 @@
 #include "crypto_guard_ctx.h"
 
 #include <iomanip>
+#include <openssl/err.h>
 #include <openssl/evp.h>
 #include <sstream>
 #include <stdexcept>
@@ -27,10 +28,13 @@ public:
 
         auto ctxDeleter = [](EVP_CIPHER_CTX *ptr) { EVP_CIPHER_CTX_free(ptr); };
         std::unique_ptr<EVP_CIPHER_CTX, decltype(ctxDeleter)> ctx{EVP_CIPHER_CTX_new()};
+        if (!ctx) {
+            throw std::runtime_error("EncryptFile: error on EVP_CIPHER_CTX_new(): " + getErrorString());
+        }
 
         if (!EVP_CipherInit_ex(ctx.get(), params.cipher, nullptr, params.key.data(), params.iv.data(),
                                params.encrypt)) {
-            throw std::runtime_error("EncryptFile: error on EVP_CipherInit_ex()");
+            throw std::runtime_error("EncryptFile: error on EVP_CipherInit_ex(): " + getErrorString());
         }
 
         std::vector<unsigned char> inBuf(1024);
@@ -44,14 +48,14 @@ public:
             }
 
             if (!EVP_CipherUpdate(ctx.get(), outBuf.data(), &outLen, inBuf.data(), inLen)) {
-                throw std::runtime_error("EncryptFile: error on EVP_CipherUpdate()");
+                throw std::runtime_error("EncryptFile: error on EVP_CipherUpdate(): " + getErrorString());
             }
 
             outStream.write(reinterpret_cast<const char *>(outBuf.data()), outLen);
         }
 
         if (!EVP_CipherFinal_ex(ctx.get(), outBuf.data(), &outLen)) {
-            throw std::runtime_error("EncryptFile: error on EVP_CipherFinal_ex()");
+            throw std::runtime_error("EncryptFile: error on EVP_CipherFinal_ex(): " + getErrorString());
         }
         if (!outStream) {
             throw std::runtime_error("EncryptFile: fail state of output stream (2)");
@@ -72,10 +76,13 @@ public:
 
         auto ctxDeleter = [](EVP_CIPHER_CTX *ptr) { EVP_CIPHER_CTX_free(ptr); };
         std::unique_ptr<EVP_CIPHER_CTX, decltype(ctxDeleter)> ctx{EVP_CIPHER_CTX_new()};
+        if (!ctx) {
+            throw std::runtime_error("DecryptFile: error on EVP_CIPHER_CTX_new(): " + getErrorString());
+        }
 
         if (!EVP_CipherInit_ex(ctx.get(), params.cipher, nullptr, params.key.data(), params.iv.data(),
                                params.encrypt)) {
-            throw std::runtime_error("DecryptFile: error on EVP_CipherInit_ex()");
+            throw std::runtime_error("DecryptFile: error on EVP_CipherInit_ex(): " + getErrorString());
         }
 
         std::vector<unsigned char> inBuf(1024);
@@ -89,14 +96,14 @@ public:
             }
 
             if (!EVP_CipherUpdate(ctx.get(), outBuf.data(), &outLen, inBuf.data(), inLen)) {
-                throw std::runtime_error("DecryptFile: error on EVP_CipherUpdate()");
+                throw std::runtime_error("DecryptFile: error on EVP_CipherUpdate(): " + getErrorString());
             }
 
             outStream.write(reinterpret_cast<const char *>(outBuf.data()), outLen);
         }
 
         if (!EVP_CipherFinal_ex(ctx.get(), outBuf.data(), &outLen)) {
-            throw std::runtime_error("DecryptFile: error on EVP_CipherFinal_ex()");
+            throw std::runtime_error("DecryptFile: error on EVP_CipherFinal_ex(): " + getErrorString());
         }
         if (!outStream) {
             throw std::runtime_error("DecryptFile: fail state of output stream (2)");
@@ -112,11 +119,11 @@ public:
         auto ctxDeleter = [](EVP_MD_CTX *ptr) { EVP_MD_CTX_free(ptr); };
         std::unique_ptr<EVP_MD_CTX, decltype(ctxDeleter)> ctx(EVP_MD_CTX_new());
         if (!ctx) {
-            throw std::runtime_error("CalculateChecksum: message digest create failed");
+            throw std::runtime_error("CalculateChecksum: error on getErrorString(): " + getErrorString());
         }
 
         if (!EVP_DigestInit_ex(ctx.get(), EVP_sha256(), NULL)) {
-            throw std::runtime_error("CalculateChecksum: error on EVP_DigestInit_ex()");
+            throw std::runtime_error("CalculateChecksum: error on EVP_DigestInit_ex(): " + getErrorString());
         }
 
         std::vector<std::byte> inBuf(1024);
@@ -128,14 +135,14 @@ public:
             }
 
             if (!EVP_DigestUpdate(ctx.get(), inBuf.data(), inLen)) {
-                throw std::runtime_error("CalculateChecksum: error on EVP_DigestUpdate()");
+                throw std::runtime_error("CalculateChecksum: error on EVP_DigestUpdate(): " + getErrorString());
             }
         }
 
         uint8_t hash[EVP_MAX_MD_SIZE];
         unsigned int lengthOfHash = 0;
         if (!EVP_DigestFinal_ex(ctx.get(), hash, &lengthOfHash)) {
-            throw std::runtime_error("CalculateChecksum: error on EVP_DigestFinal_ex()");
+            throw std::runtime_error("CalculateChecksum: error on EVP_DigestFinal_ex(): " + getErrorString());
         }
 
         std::ostringstream out;
@@ -170,6 +177,8 @@ private:
 
         return params;
     }
+
+    std::string getErrorString() const { return std::string(ERR_error_string(ERR_get_error(), NULL)); }
 };
 
 CryptoGuardCtx::CryptoGuardCtx() : pImpl_{std::make_unique<Impl>()} {}
